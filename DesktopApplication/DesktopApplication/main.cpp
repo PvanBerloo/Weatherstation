@@ -1,10 +1,10 @@
-#include "QtTest.h"
+#include "Window.h"
 #include <QtWidgets/QApplication>
 
 int main(int argc, char *argv[])
 {
 	QApplication a(argc, argv);
-	QtTest w;
+	Window w;
 	w.show();
 	return a.exec();
 }

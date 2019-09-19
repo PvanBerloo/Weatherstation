@@ -33,26 +33,26 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="QtTest.cpp">
+    <ClCompile Include="Window.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <QtMoc Include="QtTest.h">
-      <Filter>Header Files</Filter>
-    </QtMoc>
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <QtUic Include="QtTest.ui">
+    <QtUic Include="Window.ui">
       <Filter>Form Files</Filter>
     </QtUic>
   </ItemGroup>
   <ItemGroup>
-    <QtRcc Include="QtTest.qrc">
-      <Filter>Resource Files</Filter>
-    </QtRcc>
+    <QtMoc Include="Window.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
+    <QtRcc Include="Window.qrc">
+      <Filter>Resource Files</Filter>
+    </QtRcc>
   </ItemGroup>
 </Project>

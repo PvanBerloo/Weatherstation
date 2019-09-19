@@ -1,4 +1,4 @@
-#include "QtTest.h"
+#include "Window.h"
 
 #include <QStringListModel>
 
@@ -20,10 +20,9 @@ void openConsole() {
 	freopen("conout$", "w", stderr);
 }
 
-QtTest::QtTest(QWidget *parent)
-	: QMainWindow(parent)
-
+Window::Window(QWidget *parent) : QMainWindow(parent)
 {
+
 	ui.setupUi(this);
 
 	//openConsole();
