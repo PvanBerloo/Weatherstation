@@ -24,7 +24,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "SI7021.h"
 
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -49,6 +51,7 @@ UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 
 osThreadId defaultTaskHandle;
+osThreadId readSensorsTaskHandle;
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -60,6 +63,7 @@ static void MX_I2C1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_USART2_UART_Init(void);
 void StartDefaultTask(void const * argument);
+void StartReadSensorsTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -125,6 +129,10 @@ int main(void)
   /* definition and creation of defaultTask */
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+
+  /* definition and creation of readSensorsTask */
+  osThreadDef(readSensorsTask, StartReadSensorsTask, osPriorityIdle, 0, 128);
+  readSensorsTaskHandle = osThreadCreate(osThread(readSensorsTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -338,6 +346,33 @@ void StartDefaultTask(void const * argument)
     osDelay(1);
   }
   /* USER CODE END 5 */ 
+}
+
+/* USER CODE BEGIN Header_StartReadSensorsTask */
+/**
+* @brief Function implementing the readSensorsTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartReadSensorsTask */
+void StartReadSensorsTask(void const * argument)
+{
+  /* USER CODE BEGIN StartReadSensorsTask */
+  /* Infinite loop */
+  for(;;)
+  {
+	float temperature, humidity;
+	SI7021_readTemperature(&hi2c1, &temperature, 1000);
+	SI7021_readHumidity(&hi2c1, &humidity, 1000);
+
+	char buffer[7];
+	snprintf(buffer, sizeof(buffer), "%i %i\n", (int)temperature, (int)humidity);
+
+	HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), 1000);
+
+    osDelay(1000);
+  }
+  /* USER CODE END StartReadSensorsTask */
 }
 
 /**
