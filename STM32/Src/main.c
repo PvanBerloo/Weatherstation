@@ -24,6 +24,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+
 #include "SI7021.h"
 
 #include <string.h>
@@ -51,7 +52,6 @@ UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 
 osThreadId defaultTaskHandle;
-osThreadId readSensorsTaskHandle;
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -63,7 +63,6 @@ static void MX_I2C1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_USART2_UART_Init(void);
 void StartDefaultTask(void const * argument);
-void StartReadSensorsTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -127,12 +126,8 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
+  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 512);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
-
-  /* definition and creation of readSensorsTask */
-  osThreadDef(readSensorsTask, StartReadSensorsTask, osPriorityIdle, 0, 128);
-  readSensorsTaskHandle = osThreadCreate(osThread(readSensorsTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -150,6 +145,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
   }
   /* USER CODE END 3 */
 }
@@ -338,41 +334,29 @@ static void MX_GPIO_Init(void)
 /* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void const * argument)
 {
+	/* USER CODE BEGIN 5 */
+	TickType_t xLastWakeTime = xTaskGetTickCount();
+	const TickType_t xFrequency = 5000 / portTICK_PERIOD_MS;
 
-  /* USER CODE BEGIN 5 */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END 5 */ 
-}
+	for(;;)
+	{
+		float temperature, humidity;
+		SI7021_readTemperature(&hi2c1, &temperature, 1000);
+		SI7021_readHumidity(&hi2c1, &humidity, 1000);
 
-/* USER CODE BEGIN Header_StartReadSensorsTask */
-/**
-* @brief Function implementing the readSensorsTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartReadSensorsTask */
-void StartReadSensorsTask(void const * argument)
-{
-  /* USER CODE BEGIN StartReadSensorsTask */
-  /* Infinite loop */
-  for(;;)
-  {
-	float temperature, humidity;
-	SI7021_readTemperature(&hi2c1, &temperature, 1000);
-	SI7021_readHumidity(&hi2c1, &humidity, 1000);
+		char* cipstart = "AT+CIPSTART=\"TCP\",\"192.168.137.1\",8080\r\n";
+		char* cipsend = "AT+CIPSEND=8\r\n";
 
-	char buffer[7];
-	snprintf(buffer, sizeof(buffer), "%i %i\n", (int)temperature, (int)humidity);
+		HAL_UART_Transmit(&huart1, (uint8_t*)cipstart, strlen(cipstart), 1000);
+		osDelay(1000);
+		HAL_UART_Transmit(&huart1, (uint8_t*)cipsend, strlen(cipsend), 1000);
+		osDelay(1500);
+		HAL_UART_Transmit(&huart1, (uint8_t*)&temperature, sizeof(float), 1000);
+		HAL_UART_Transmit(&huart1, (uint8_t*)&humidity, sizeof(float), 1000);
 
-	HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), 1000);
-
-    osDelay(1000);
-  }
-  /* USER CODE END StartReadSensorsTask */
+		vTaskDelayUntil( &xLastWakeTime, xFrequency );
+	}
+	/* USER CODE END 5 */
 }
 
 /**
