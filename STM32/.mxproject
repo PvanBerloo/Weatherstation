@@ -1,7 +1,7 @@
 [PreviousGenFiles]
-HeaderPath=E:/Github/pvb/Weatherstation/STM32/Inc
+HeaderPath=C:/Users/Paul/Documents/Github/Weatherstation/STM32/Inc
 HeaderFiles=FreeRTOSConfig.h;stm32f0xx_it.h;stm32f0xx_hal_conf.h;main.h;
-SourcePath=E:/Github/pvb/Weatherstation/STM32/Src
+SourcePath=C:/Users/Paul/Documents/Github/Weatherstation/STM32/Src
 SourceFiles=freertos.c;stm32f0xx_it.c;stm32f0xx_hal_msp.c;stm32f0xx_hal_timebase_tim.c;main.c;
 
 [PreviousLibFiles]

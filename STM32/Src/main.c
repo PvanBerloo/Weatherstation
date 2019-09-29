@@ -25,6 +25,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "SI7021.h"
+
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -123,7 +126,7 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
+  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 512);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -142,6 +145,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
   }
   /* USER CODE END 3 */
 }
@@ -319,6 +323,27 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+/* Send measurements to server using an ESP8266.
+ * UART_HandleTypeDef* uart 	- Handle to the uart device that interfaces with the ESP8266.
+ * char* ipaddress 				- Address of server to connect to, can be ip or domain name.
+ * uint16_t port				- Port to connect to on server.
+ * float temperature			- Temperature data to send.
+ * float humidity				- Humidity data to send.
+ */
+void sendMeasurements(UART_HandleTypeDef* uart, char* ipaddress, uint16_t port, float temperature, float humidity)
+{
+	char cipstart[50];
+	snprintf(cipstart, sizeof(cipstart), "AT+CIPSTART=\"TCP\",\"%s\",%i\r\n", ipaddress, port);
+	char* cipsend = "AT+CIPSEND=8\r\n";
+
+	HAL_UART_Transmit(uart, (uint8_t*)cipstart, strlen(cipstart), 1000);
+	osDelay(1000);
+	HAL_UART_Transmit(uart, (uint8_t*)cipsend, strlen(cipsend), 1000);
+	osDelay(1500);
+	// STM32 is little endian so no problem when sending to x86 computers.
+	HAL_UART_Transmit(uart, (uint8_t*)&temperature, sizeof(float), 1000);
+	HAL_UART_Transmit(uart, (uint8_t*)&humidity, sizeof(float), 1000);
+}
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -332,11 +357,19 @@ void StartDefaultTask(void const * argument)
 {
 
   /* USER CODE BEGIN 5 */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
+	TickType_t xLastWakeTime = xTaskGetTickCount();
+	const TickType_t xFrequency = 5000 / portTICK_PERIOD_MS;
+
+	for(;;)
+	{
+		float temperature, humidity;
+		SI7021_readTemperature(&hi2c1, &temperature, 1000);
+		SI7021_readHumidity(&hi2c1, &humidity, 1000);
+
+		sendMeasurements(&huart1, "192.168.137.1", 8080, temperature, humidity);
+
+		vTaskDelayUntil( &xLastWakeTime, xFrequency );
+	}
   /* USER CODE END 5 */ 
 }
 
