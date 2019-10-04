@@ -341,8 +341,63 @@ void sendMeasurements(UART_HandleTypeDef* uart, char* ipaddress, uint16_t port, 
 	HAL_UART_Transmit(uart, (uint8_t*)cipsend, strlen(cipsend), 1000);
 	osDelay(1500);
 	// STM32 is little endian so no problem when sending to x86 computers.
-	HAL_UART_Transmit(uart, (uint8_t*)&temperature, sizeof(float), 1000);
-	HAL_UART_Transmit(uart, (uint8_t*)&humidity, sizeof(float), 1000);
+	float t = temperature;
+	float h = humidity;
+	HAL_UART_Transmit(uart, (uint8_t*)&t, sizeof(float), 1000);
+	HAL_UART_Transmit(uart, (uint8_t*)&h, sizeof(float), 1000);
+}
+
+uint8_t I2C_read_uint8(I2C_HandleTypeDef* i2c, uint8_t address, uint8_t reg)
+{
+    uint8_t result = 0;
+
+    HAL_I2C_Master_Transmit(i2c, address, &reg, sizeof(uint8_t), 1000);
+    HAL_I2C_Master_Receive(i2c, address, &result, sizeof(uint8_t), 1000);
+
+    return result;
+}
+
+uint16_t I2C_read_uint16(I2C_HandleTypeDef* i2c, uint8_t address, uint8_t reg)
+{
+    uint16_t result = 0;
+
+    HAL_I2C_Master_Transmit(i2c, address, &reg, sizeof(uint8_t), 1000);
+    HAL_I2C_Master_Receive(i2c, address, (uint8_t*)&result, sizeof(uint16_t), 1000);
+
+    return result;
+}
+
+int16_t I2C_read_int16(I2C_HandleTypeDef* i2c, uint8_t address, uint8_t reg)
+{
+    return (int16_t)I2C_read_uint16(i2c, address, reg);
+}
+
+void BMP280_setConfigRegister(I2C_HandleTypeDef* i2c, uint8_t temperatureOversampling, uint8_t pressureOversampling, uint8_t powerMode)
+{
+    uint8_t data[2] = { 0xF4, ((temperatureOversampling << 5) | (pressureOversampling << 2)) | powerMode };
+
+    HAL_I2C_Master_Transmit(i2c, 0x77<<1, data, sizeof(data), 1000);
+}
+
+// t_fine carries fine temperature as global value
+// will be used in pressure computation
+int32_t t_fine;
+
+uint16_t dig_T1;
+int16_t dig_T2;
+int16_t dig_T3;
+
+// From BMP280 manual
+int32_t bmp280_compensate_T_int32(int32_t adc_T)
+{
+    int32_t var1, var2, T;
+
+    var1 = ((((adc_T>>3) - ((int32_t)dig_T1<<1))) * ((int32_t)dig_T2)) >> 11;
+    var2 = (((((adc_T>>4) - ((int32_t)dig_T1)) * ((adc_T>>4) - ((int32_t)dig_T1))) >> 12) *
+        ((int32_t)dig_T3)) >> 14;
+    t_fine = var1 + var2;
+    T = (t_fine * 5 + 128) >> 8;
+    return T;
 }
 /* USER CODE END 4 */
 
@@ -360,6 +415,14 @@ void StartDefaultTask(void const * argument)
 	TickType_t xLastWakeTime = xTaskGetTickCount();
 	const TickType_t xFrequency = 5000 / portTICK_PERIOD_MS;
 
+	uint8_t address = 0x77 << 1;
+
+	dig_T1 = I2C_read_uint16(&hi2c1, address, 0x88);
+	dig_T2 = I2C_read_uint16(&hi2c1, address, 0x8A);
+	dig_T3 = I2C_read_uint16(&hi2c1, address, 0x8C);
+
+	BMP280_setConfigRegister(&hi2c1, 1, 1, 3);
+
 	for(;;)
 	{
 		float temperature, humidity;
@@ -367,6 +430,24 @@ void StartDefaultTask(void const * argument)
 		SI7021_readHumidity(&hi2c1, &humidity, 1000);
 
 		sendMeasurements(&huart1, "192.168.137.1", 8080, temperature, humidity);
+
+		uint8_t read_address = 0xFA;
+		HAL_I2C_Master_Transmit(&hi2c1, address, &read_address, sizeof(uint8_t), 1000);
+
+		uint8_t result[3] = {0, 0, 0};
+
+		HAL_I2C_Master_Transmit(&hi2c1, address, &read_address, sizeof(uint8_t), 1000);
+		HAL_I2C_Master_Receive(&hi2c1, address, result, sizeof(result), 10000);
+
+		uint32_t result_combined = result[0] << 12 | result[1] << 4 | result[2];
+
+		int32_t temp = bmp280_compensate_T_int32(*(int32_t*)&result_combined);
+
+		char txt[20];
+
+		sprintf(txt, "%li\n", temp);
+
+		HAL_UART_Transmit(&huart2, (uint8_t*)txt, strlen(txt), 1000);
 
 		vTaskDelayUntil( &xLastWakeTime, xFrequency );
 	}
