@@ -330,11 +330,11 @@ static void MX_GPIO_Init(void)
  * float temperature			- Temperature data to send.
  * float humidity				- Humidity data to send.
  */
-void sendMeasurements(UART_HandleTypeDef* uart, char* ipaddress, uint16_t port, float temperature, float humidity)
+void sendMeasurements(UART_HandleTypeDef* uart, char* ipaddress, uint16_t port, float temperature, float humidity, float pressure)
 {
 	char cipstart[50];
 	snprintf(cipstart, sizeof(cipstart), "AT+CIPSTART=\"TCP\",\"%s\",%i\r\n", ipaddress, port);
-	char* cipsend = "AT+CIPSEND=8\r\n";
+	char* cipsend = "AT+CIPSEND=12\r\n";
 
 	HAL_UART_Transmit(uart, (uint8_t*)cipstart, strlen(cipstart), 1000);
 	osDelay(1000);
@@ -343,8 +343,10 @@ void sendMeasurements(UART_HandleTypeDef* uart, char* ipaddress, uint16_t port, 
 	// STM32 is little endian so no problem when sending to x86 computers.
 	float t = temperature;
 	float h = humidity;
+	float p = pressure;
 	HAL_UART_Transmit(uart, (uint8_t*)&t, sizeof(float), 1000);
 	HAL_UART_Transmit(uart, (uint8_t*)&h, sizeof(float), 1000);
+	HAL_UART_Transmit(uart, (uint8_t*)&p, sizeof(float), 1000);
 }
 
 uint8_t I2C_read_uint8(I2C_HandleTypeDef* i2c, uint8_t address, uint8_t reg)
@@ -387,6 +389,16 @@ uint16_t dig_T1;
 int16_t dig_T2;
 int16_t dig_T3;
 
+uint16_t dig_P1;
+int16_t dig_P2;
+int16_t dig_P3;
+int16_t dig_P4;
+int16_t dig_P5;
+int16_t dig_P6;
+int16_t dig_P7;
+int16_t dig_P8;
+int16_t dig_P9;
+
 // From BMP280 manual
 int32_t bmp280_compensate_T_int32(int32_t adc_T)
 {
@@ -399,6 +411,49 @@ int32_t bmp280_compensate_T_int32(int32_t adc_T)
     T = (t_fine * 5 + 128) >> 8;
     return T;
 }
+
+uint32_t  bmp280_compensate_P_int64(int32_t adc_P)
+{
+int64_t var1, var2, p;
+var1 = ((int64_t)t_fine) - 128000;
+var2 = var1 * var1 * (int64_t)dig_P6;
+var2 = var2 + ((var1*(int64_t)dig_P5)<<17);
+var2 = var2 + (((int64_t)dig_P4)<<35);
+var1 = ((var1 * var1 * (int64_t)dig_P3)>>8) + ((var1 * (int64_t)dig_P2)<<12);
+var1 = (((((int64_t)1)<<47)+var1))*((int64_t)dig_P1)>>33;
+if (var1 == 0)
+{
+return 0; // avoid exception caused by division by zero
+}
+p = 1048576-adc_P;
+p = (((p<<31)-var2)*3125)/var1;
+var1 = (((int64_t)dig_P9) * (p>>13) * (p>>13)) >> 25;
+var2 = (((int64_t)dig_P8) * p) >> 19;
+p = ((p + var1 + var2) >> 8) + (((int64_t)dig_P7)<<4);
+return (uint32_t)p;
+}
+
+uint32_t read_int24(I2C_HandleTypeDef* i2c, uint8_t address, uint8_t read_address){
+	uint8_t result[3] = {0, 0, 0};
+
+	HAL_I2C_Master_Transmit(&hi2c1, address, &read_address, sizeof(uint8_t), 1000);
+	HAL_I2C_Master_Receive(&hi2c1, address, result, sizeof(result), 10000);
+
+	uint32_t result_combined = result[0] << 12 | result[1] << 4 | result[2];
+	return result_combined;
+}
+
+void bmp280_read_temperature(I2C_HandleTypeDef* i2c, float* temperature){
+	uint32_t result = read_int24(i2c, 0x77 << 1, 0xFA);
+	*temperature = bmp280_compensate_T_int32(*(int32_t*)&result)/100.0f;
+}
+
+void bmp280_read_pressure(I2C_HandleTypeDef* i2c, float* pressure){
+	uint32_t result = read_int24(i2c, 0x77 << 1, 0xF7);
+	*pressure = bmp280_compensate_P_int64(*(int32_t*)&result)/2560.0f;
+}
+
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -410,7 +465,6 @@ int32_t bmp280_compensate_T_int32(int32_t adc_T)
 /* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void const * argument)
 {
-
   /* USER CODE BEGIN 5 */
 	TickType_t xLastWakeTime = xTaskGetTickCount();
 	const TickType_t xFrequency = 5000 / portTICK_PERIOD_MS;
@@ -421,33 +475,29 @@ void StartDefaultTask(void const * argument)
 	dig_T2 = I2C_read_uint16(&hi2c1, address, 0x8A);
 	dig_T3 = I2C_read_uint16(&hi2c1, address, 0x8C);
 
+	dig_P1 = I2C_read_uint16(&hi2c1, address, 0x8E);
+	dig_P2 = I2C_read_uint16(&hi2c1, address, 0x90);
+	dig_P3 = I2C_read_uint16(&hi2c1, address, 0x92);
+	dig_P4 = I2C_read_uint16(&hi2c1, address, 0x94);
+	dig_P5 = I2C_read_uint16(&hi2c1, address, 0x96);
+	dig_P6 = I2C_read_uint16(&hi2c1, address, 0x98);
+	dig_P7 = I2C_read_uint16(&hi2c1, address, 0x9A);
+	dig_P8 = I2C_read_uint16(&hi2c1, address, 0x9C);
+	dig_P9 = I2C_read_uint16(&hi2c1, address, 0x9E);
+
 	BMP280_setConfigRegister(&hi2c1, 1, 1, 3);
 
 	for(;;)
 	{
-		float temperature, humidity;
-		SI7021_readTemperature(&hi2c1, &temperature, 1000);
+		float temperature, humidity, pressure;
+
 		SI7021_readHumidity(&hi2c1, &humidity, 1000);
 
-		sendMeasurements(&huart1, "192.168.137.1", 8080, temperature, humidity);
+		bmp280_read_temperature(&hi2c1, &temperature);
 
-		uint8_t read_address = 0xFA;
-		HAL_I2C_Master_Transmit(&hi2c1, address, &read_address, sizeof(uint8_t), 1000);
+		bmp280_read_pressure(&hi2c1, &pressure);
 
-		uint8_t result[3] = {0, 0, 0};
-
-		HAL_I2C_Master_Transmit(&hi2c1, address, &read_address, sizeof(uint8_t), 1000);
-		HAL_I2C_Master_Receive(&hi2c1, address, result, sizeof(result), 10000);
-
-		uint32_t result_combined = result[0] << 12 | result[1] << 4 | result[2];
-
-		int32_t temp = bmp280_compensate_T_int32(*(int32_t*)&result_combined);
-
-		char txt[20];
-
-		sprintf(txt, "%li\n", temp);
-
-		HAL_UART_Transmit(&huart2, (uint8_t*)txt, strlen(txt), 1000);
+		sendMeasurements(&huart1, "192.168.137.1", 8080, temperature, humidity, pressure);
 
 		vTaskDelayUntil( &xLastWakeTime, xFrequency );
 	}
@@ -479,6 +529,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   * @brief  This function is executed in case of error occurrence.
   * @retval None
   */
+
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
