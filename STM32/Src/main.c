@@ -350,23 +350,6 @@ void sendMeasurements(UART_HandleTypeDef* uart, char* ipaddress, uint16_t port, 
 	HAL_UART_Transmit(uart, (uint8_t*)&p, sizeof(float), 1000);
 }
 
-/*
-uint8_t I2C_read_uint8(I2C_HandleTypeDef* i2c, uint8_t address, uint8_t reg)
-{
-    uint8_t result = 0;
-
-    HAL_I2C_Master_Transmit(i2c, address, &reg, sizeof(uint8_t), 1000);
-    HAL_I2C_Master_Receive(i2c, address, &result, sizeof(uint8_t), 1000);
-
-    return result;
-}
-
-int16_t I2C_read_int16(I2C_HandleTypeDef* i2c, uint8_t address, uint8_t reg)
-{
-    return (int16_t)I2C_read_uint16(i2c, address, reg);
-}
-*/
-
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -384,9 +367,9 @@ void StartDefaultTask(void const * argument)
 	TickType_t xLastWakeTime = xTaskGetTickCount();
 	const TickType_t xFrequency = 5000 / portTICK_PERIOD_MS;
 
-	BMP280_setTempPressure(&hi2c1);
+	BMP280_readCompensationRegisters(&hi2c1);
 
-	BMP280_setConfigRegister(&hi2c1, 1, 1, 3);
+	BMP280_setConfigRegister(&hi2c1, BMP280_OVERSAMPLING_1, BMP280_OVERSAMPLING_1, BMP280_POWERMODE_NORMAL);
 
 	for(;;)
 	{
