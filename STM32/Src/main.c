@@ -26,6 +26,7 @@
 /* USER CODE BEGIN Includes */
 
 #include "SI7021.h"
+#include "BMP280.h"
 
 #include <string.h>
 /* USER CODE END Includes */
@@ -330,20 +331,25 @@ static void MX_GPIO_Init(void)
  * float temperature			- Temperature data to send.
  * float humidity				- Humidity data to send.
  */
-void sendMeasurements(UART_HandleTypeDef* uart, char* ipaddress, uint16_t port, float temperature, float humidity)
+void sendMeasurements(UART_HandleTypeDef* uart, char* ipaddress, uint16_t port, float temperature, float humidity, float pressure)
 {
 	char cipstart[50];
 	snprintf(cipstart, sizeof(cipstart), "AT+CIPSTART=\"TCP\",\"%s\",%i\r\n", ipaddress, port);
-	char* cipsend = "AT+CIPSEND=8\r\n";
+	char* cipsend = "AT+CIPSEND=12\r\n";
 
 	HAL_UART_Transmit(uart, (uint8_t*)cipstart, strlen(cipstart), 1000);
 	osDelay(1000);
 	HAL_UART_Transmit(uart, (uint8_t*)cipsend, strlen(cipsend), 1000);
 	osDelay(1500);
 	// STM32 is little endian so no problem when sending to x86 computers.
-	HAL_UART_Transmit(uart, (uint8_t*)&temperature, sizeof(float), 1000);
-	HAL_UART_Transmit(uart, (uint8_t*)&humidity, sizeof(float), 1000);
+	float t = temperature;
+	float h = humidity;
+	float p = pressure;
+	HAL_UART_Transmit(uart, (uint8_t*)&t, sizeof(float), 1000);
+	HAL_UART_Transmit(uart, (uint8_t*)&h, sizeof(float), 1000);
+	HAL_UART_Transmit(uart, (uint8_t*)&p, sizeof(float), 1000);
 }
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -353,20 +359,29 @@ void sendMeasurements(UART_HandleTypeDef* uart, char* ipaddress, uint16_t port, 
   * @retval None
   */
 /* USER CODE END Header_StartDefaultTask */
+
+
 void StartDefaultTask(void const * argument)
 {
-
   /* USER CODE BEGIN 5 */
 	TickType_t xLastWakeTime = xTaskGetTickCount();
 	const TickType_t xFrequency = 5000 / portTICK_PERIOD_MS;
 
+	BMP280_readCompensationRegisters(&hi2c1);
+
+	BMP280_setConfigRegister(&hi2c1, BMP280_OVERSAMPLING_1, BMP280_OVERSAMPLING_1, BMP280_POWERMODE_NORMAL);
+
 	for(;;)
 	{
-		float temperature, humidity;
-		SI7021_readTemperature(&hi2c1, &temperature, 1000);
+		float temperature, humidity, pressure;
+
+		BMP280_readTemperature(&hi2c1, &temperature, 1000);
+
 		SI7021_readHumidity(&hi2c1, &humidity, 1000);
 
-		sendMeasurements(&huart1, "192.168.137.1", 8080, temperature, humidity);
+		BMP280_readPressure(&hi2c1, &pressure, 1000);
+
+		sendMeasurements(&huart1, "192.168.137.1", 8080, temperature, humidity, pressure);
 
 		vTaskDelayUntil( &xLastWakeTime, xFrequency );
 	}
@@ -398,6 +413,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   * @brief  This function is executed in case of error occurrence.
   * @retval None
   */
+
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
