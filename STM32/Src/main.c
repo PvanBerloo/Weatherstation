@@ -38,7 +38,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define PIN_ESP_WAKEUP GPIOB, GPIO_PIN_4
+#define ESP_WAKEUP_TIME 7000
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -48,6 +49,8 @@
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+
+RTC_HandleTypeDef hrtc;
 
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
@@ -63,6 +66,7 @@ static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_RTC_Init(void);
 void StartDefaultTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
@@ -105,6 +109,7 @@ int main(void)
   MX_I2C1_Init();
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
+  MX_RTC_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -163,9 +168,10 @@ void SystemClock_Config(void)
 
   /** Initializes the CPU, AHB and APB busses clocks 
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -183,9 +189,11 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART1|RCC_PERIPHCLK_I2C1;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART1|RCC_PERIPHCLK_I2C1
+                              |RCC_PERIPHCLK_RTC;
   PeriphClkInit.Usart1ClockSelection = RCC_USART1CLKSOURCE_PCLK1;
   PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_HSI;
+  PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
@@ -235,6 +243,86 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief RTC Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_RTC_Init(void)
+{
+
+  /* USER CODE BEGIN RTC_Init 0 */
+
+  /* USER CODE END RTC_Init 0 */
+
+  RTC_TimeTypeDef sTime = {0};
+  RTC_DateTypeDef sDate = {0};
+  RTC_AlarmTypeDef sAlarm = {0};
+
+  /* USER CODE BEGIN RTC_Init 1 */
+
+  /* USER CODE END RTC_Init 1 */
+  /** Initialize RTC Only 
+  */
+  hrtc.Instance = RTC;
+  hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
+  hrtc.Init.AsynchPrediv = 127;
+  hrtc.Init.SynchPrediv = 255;
+  hrtc.Init.OutPut = RTC_OUTPUT_DISABLE;
+  hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
+  hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
+  if (HAL_RTC_Init(&hrtc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /* USER CODE BEGIN Check_RTC_BKUP */
+    
+  /* USER CODE END Check_RTC_BKUP */
+
+  /** Initialize RTC and set the Time and Date 
+  */
+  sTime.Hours = 0;
+  sTime.Minutes = 0;
+  sTime.Seconds = 0;
+  sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
+  sTime.StoreOperation = RTC_STOREOPERATION_RESET;
+  if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sDate.WeekDay = RTC_WEEKDAY_MONDAY;
+  sDate.Month = RTC_MONTH_JANUARY;
+  sDate.Date = 1;
+  sDate.Year = 0;
+
+  if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BIN) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Enable the Alarm A 
+  */
+  sAlarm.AlarmTime.Hours = 0;
+  sAlarm.AlarmTime.Minutes = 1;
+  sAlarm.AlarmTime.Seconds = 13;
+  sAlarm.AlarmTime.SubSeconds = 0;
+  sAlarm.AlarmTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
+  sAlarm.AlarmTime.StoreOperation = RTC_STOREOPERATION_RESET;
+  sAlarm.AlarmMask = RTC_ALARMMASK_DATEWEEKDAY|RTC_ALARMMASK_HOURS;
+  sAlarm.AlarmSubSecondMask = RTC_ALARMSUBSECONDMASK_ALL;
+  sAlarm.AlarmDateWeekDaySel = RTC_ALARMDATEWEEKDAYSEL_DATE;
+  sAlarm.AlarmDateWeekDay = 1;
+  sAlarm.Alarm = RTC_ALARM_A;
+  if (HAL_RTC_SetAlarm_IT(&hrtc, &sAlarm, RTC_FORMAT_BIN) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN RTC_Init 2 */
+
+  /* USER CODE END RTC_Init 2 */
 
 }
 
@@ -315,10 +403,21 @@ static void MX_USART2_UART_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PB4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 }
 
@@ -331,23 +430,60 @@ static void MX_GPIO_Init(void)
  * float temperature			- Temperature data to send.
  * float humidity				- Humidity data to send.
  */
-void sendMeasurements(UART_HandleTypeDef* uart, char* ipaddress, uint16_t port, float temperature, float humidity, float pressure)
+void sendMeasurements(UART_HandleTypeDef* uart, float temperature, float humidity, float pressure)
 {
-	char cipstart[50];
-	snprintf(cipstart, sizeof(cipstart), "AT+CIPSTART=\"TCP\",\"%s\",%i\r\n", ipaddress, port);
-	char* cipsend = "AT+CIPSEND=12\r\n";
+	char cipstart[] = "AT+CIPSTART=\"TCP\",\"weatherstationc.000webhostapp.com\",80\r\n";
+	HAL_UART_Transmit(&huart1, (uint8_t*)cipstart, strlen(cipstart), 1000);
 
-	HAL_UART_Transmit(uart, (uint8_t*)cipstart, strlen(cipstart), 1000);
+	osDelay(2000);
+
+	char cipsend[17];
+	char t[10];
+	char h[10];
+	char p[10];
+
+	snprintf(t, sizeof(t), "%i", (int)(temperature*100));
+	snprintf(h, sizeof(h), "%i", (int)(humidity*100));
+	snprintf(p, sizeof(p), "%i", (int)(pressure*100));
+
+	snprintf(cipsend, sizeof(cipsend),"AT+CIPSEND=%i\r\n", 103 + strlen(t) + strlen(h)+strlen(p));
+	HAL_UART_Transmit(&huart1, (uint8_t*)cipsend, strlen(cipsend), 1000);
+
 	osDelay(1000);
-	HAL_UART_Transmit(uart, (uint8_t*)cipsend, strlen(cipsend), 1000);
-	osDelay(1500);
-	// STM32 is little endian so no problem when sending to x86 computers.
-	float t = temperature;
-	float h = humidity;
-	float p = pressure;
-	HAL_UART_Transmit(uart, (uint8_t*)&t, sizeof(float), 1000);
-	HAL_UART_Transmit(uart, (uint8_t*)&h, sizeof(float), 1000);
-	HAL_UART_Transmit(uart, (uint8_t*)&p, sizeof(float), 1000);
+
+	char http[130];
+	snprintf(http, sizeof(http),"GET /connect.php?temperature=%s&humidity=%s&pressure=%s HTTP/1.1\r\nHost: weatherstationc.000webhostapp.com\r\n\r\n", t, h, p);
+	HAL_UART_Transmit(&huart1, (uint8_t*)http, strlen(http), 1000);
+}
+
+void wakeupESP()
+{
+	HAL_GPIO_WritePin(PIN_ESP_WAKEUP, GPIO_PIN_RESET);
+	osDelay(5);
+	HAL_GPIO_WritePin(PIN_ESP_WAKEUP, GPIO_PIN_SET);
+}
+
+void ESP8266_deepSleep(UART_HandleTypeDef* uart)
+{
+	// time does not matter because it only wakes up on reset.
+	char buffer[] = "AT+GSLP=1\r\n";
+	HAL_UART_Transmit(uart, (uint8_t*)buffer, strlen(buffer), 1000);
+}
+
+void enterSleep()
+{
+	__HAL_RCC_PWR_CLK_ENABLE();
+	__HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
+	//HAL_PWREx_EnableUltraLowPower();
+	//HAL_PWREx_EnableFastWakeUp();
+	HAL_SuspendTick();
+	HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
+}
+
+void resumeFromSleep()
+{
+	SystemClock_Config();
+	HAL_ResumeTick();
 }
 
 /* USER CODE END 4 */
@@ -359,31 +495,41 @@ void sendMeasurements(UART_HandleTypeDef* uart, char* ipaddress, uint16_t port, 
   * @retval None
   */
 /* USER CODE END Header_StartDefaultTask */
-
-
 void StartDefaultTask(void const * argument)
 {
+
   /* USER CODE BEGIN 5 */
-	TickType_t xLastWakeTime = xTaskGetTickCount();
-	const TickType_t xFrequency = 5000 / portTICK_PERIOD_MS;
+	//TickType_t xLastWakeTime = xTaskGetTickCount();
+	//const TickType_t xFrequency = 5000 / portTICK_PERIOD_MS;
 
 	BMP280_readCompensationRegisters(&hi2c1);
-
-	BMP280_setConfigRegister(&hi2c1, BMP280_OVERSAMPLING_1, BMP280_OVERSAMPLING_1, BMP280_POWERMODE_NORMAL);
 
 	for(;;)
 	{
 		float temperature, humidity, pressure;
 
-		BMP280_readTemperature(&hi2c1, &temperature, 1000);
+		resumeFromSleep();
+
+		wakeupESP();
+		osDelay(ESP_WAKEUP_TIME); // Allow the ESP to wake up.
 
 		SI7021_readHumidity(&hi2c1, &humidity, 1000);
 
+		// Force a single measurement.
+		BMP280_setConfigRegister(&hi2c1, BMP280_OVERSAMPLING_1, BMP280_OVERSAMPLING_1, BMP280_POWERMODE_FORCED);
+		osDelay(20);
+		BMP280_readTemperature(&hi2c1, &temperature, 1000);
 		BMP280_readPressure(&hi2c1, &pressure, 1000);
 
-		sendMeasurements(&huart1, "192.168.137.1", 8080, temperature, humidity, pressure);
+		sendMeasurements(&huart1, temperature, humidity, pressure);
 
-		vTaskDelayUntil( &xLastWakeTime, xFrequency );
+		osDelay(1000);
+
+		ESP8266_deepSleep(&huart1);
+
+		enterSleep();
+
+		//vTaskDelayUntil( &xLastWakeTime, xFrequency );
 	}
   /* USER CODE END 5 */ 
 }
@@ -413,7 +559,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   * @brief  This function is executed in case of error occurrence.
   * @retval None
   */
-
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */

@@ -148,7 +148,7 @@ HAL_StatusTypeDef BMP280_readPressure(I2C_HandleTypeDef* i2c, float* pressure, u
 	if (status != HAL_OK)
 		return status;
 
-	*pressure = BMP280_convertPressure(*(int32_t*)&result)/2560.0f;
+	*pressure = BMP280_convertPressure(*(int32_t*)&result)/25600.0f;
 
 	return HAL_OK;
 }
