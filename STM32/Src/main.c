@@ -27,6 +27,7 @@
 
 #include "SI7021.h"
 #include "BMP280.h"
+#include "ESP8266.h"
 
 #include <string.h>
 /* USER CODE END Includes */
@@ -40,6 +41,11 @@
 /* USER CODE BEGIN PD */
 #define PIN_ESP_WAKEUP GPIOB, GPIO_PIN_4
 #define ESP_WAKEUP_TIME 7000
+
+#define API_DOMAIN "weatherstationc.000webhostapp.com"
+#define API_PORT 80
+#define API_KEY "7JCUeYTF"
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -432,28 +438,15 @@ static void MX_GPIO_Init(void)
  */
 void sendMeasurements(UART_HandleTypeDef* uart, float temperature, float humidity, float pressure)
 {
-	char cipstart[] = "AT+CIPSTART=\"TCP\",\"weatherstationc.000webhostapp.com\",80\r\n";
-	HAL_UART_Transmit(&huart1, (uint8_t*)cipstart, strlen(cipstart), 1000);
+	ESP8266_createTCPConnection(uart, API_DOMAIN, API_PORT, 1000);
 
-	osDelay(2000);
+	osDelay(4000);
 
-	char cipsend[17];
-	char t[10];
-	char h[10];
-	char p[10];
+	char http[140];
+	snprintf(http, sizeof(http),"GET /connect.php?temperature=%i&humidity=%i&pressure=%i&key=%s HTTP/1.1\r\nHost: %s\r\n\r\n"
+			, (int)(temperature*100), (int)(humidity*100), (int)(pressure*100), API_KEY, API_DOMAIN);
 
-	snprintf(t, sizeof(t), "%i", (int)(temperature*100));
-	snprintf(h, sizeof(h), "%i", (int)(humidity*100));
-	snprintf(p, sizeof(p), "%i", (int)(pressure*100));
-
-	snprintf(cipsend, sizeof(cipsend),"AT+CIPSEND=%i\r\n", 103 + strlen(t) + strlen(h)+strlen(p));
-	HAL_UART_Transmit(&huart1, (uint8_t*)cipsend, strlen(cipsend), 1000);
-
-	osDelay(1000);
-
-	char http[130];
-	snprintf(http, sizeof(http),"GET /connect.php?temperature=%s&humidity=%s&pressure=%s HTTP/1.1\r\nHost: weatherstationc.000webhostapp.com\r\n\r\n", t, h, p);
-	HAL_UART_Transmit(&huart1, (uint8_t*)http, strlen(http), 1000);
+	ESP8266_sendData(uart, (uint8_t*)http, strlen(http), 1000);
 }
 
 void wakeupESP()
@@ -463,26 +456,22 @@ void wakeupESP()
 	HAL_GPIO_WritePin(PIN_ESP_WAKEUP, GPIO_PIN_SET);
 }
 
-void ESP8266_deepSleep(UART_HandleTypeDef* uart)
-{
-	// time does not matter because it only wakes up on reset.
-	char buffer[] = "AT+GSLP=1\r\n";
-	HAL_UART_Transmit(uart, (uint8_t*)buffer, strlen(buffer), 1000);
-}
-
 void enterSleep()
 {
 	__HAL_RCC_PWR_CLK_ENABLE();
+	// Clear the wake-up flag.
 	__HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU);
-	//HAL_PWREx_EnableUltraLowPower();
-	//HAL_PWREx_EnableFastWakeUp();
+	// Stop the timer that FreeRTOS uses because it will trigger a global interrupt.
 	HAL_SuspendTick();
+	// Enables stop mode. Returns from this function when global interrupt triggers.
 	HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
 }
 
 void resumeFromSleep()
 {
+	// Make sure all clocks are running again.
 	SystemClock_Config();
+	// Restart the timer for FreeRTOS
 	HAL_ResumeTick();
 }
 
@@ -499,8 +488,12 @@ void StartDefaultTask(void const * argument)
 {
 
   /* USER CODE BEGIN 5 */
-	//TickType_t xLastWakeTime = xTaskGetTickCount();
-	//const TickType_t xFrequency = 5000 / portTICK_PERIOD_MS;
+
+	// Give the ESP8266 time to boot.
+	osDelay(1000);
+
+	//ESP8266_setMode(&huart1, ESP8266_MODE_STATION, 1, 1000);
+	//ESP8266_connectToAP(&huart1, "DESKTOP-53SFJD8 6420", "75Jh&981", 1, 1000);
 
 	BMP280_readCompensationRegisters(&hi2c1);
 
@@ -511,7 +504,7 @@ void StartDefaultTask(void const * argument)
 		resumeFromSleep();
 
 		wakeupESP();
-		osDelay(ESP_WAKEUP_TIME); // Allow the ESP to wake up.
+		osDelay(ESP_WAKEUP_TIME); // Allow the ESP to wake up and connect to AP.
 
 		SI7021_readHumidity(&hi2c1, &humidity, 1000);
 

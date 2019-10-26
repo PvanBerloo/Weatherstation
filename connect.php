@@ -1,4 +1,13 @@
 <?php
+
+$password = "**";
+
+if (!isset($_GET["key"]) || strcmp(strval($_GET["key"]), $password) !== 0) {
+    echo "Invallid key";
+    exit(0);
+}
+
+
 $servername = "**";
 $username = "**";
 $password = "**";

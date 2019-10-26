@@ -1,0 +1,64 @@
+<script>
+    /**
+    * Get HTML asynchronously
+    * @param  {String}   url      The URL to get HTML from
+    * @param  {Function} callback A callback funtion. Pass in "response" variable to use returned HTML.
+    */
+    var getHTML = function ( url, callback ) {
+    
+        // Feature detection
+        if ( !window.XMLHttpRequest ) return;
+    
+        // Create new request
+        var xhr = new XMLHttpRequest();
+    
+        // Setup callback
+        xhr.onload = function() {
+            if ( callback && typeof( callback ) === 'function' ) {
+                callback( this.responseXML );
+            }
+        }
+    
+        // Get the HTML
+        xhr.open( 'GET', url );
+        xhr.responseType = 'document';
+        xhr.send();
+    
+    };
+    
+    var loadData = function(){
+     getHTML( '/getmeasurement.php', function (response) {
+        var obj = JSON.parse(response.body.innerHTML);
+        document.getElementById("column-temperature").innerHTML=obj.temperature;
+        document.getElementById("column-humidity").innerHTML=obj.humidity;
+        document.getElementById("column-pressure").innerHTML=obj.pressure;
+    });   
+    }
+    
+    window.setInterval(function(){
+      loadData();
+    }, 60000);
+    
+    loadData();
+    
+    </script>
+    
+    <table style="width: 215px;">
+    <tbody>
+    <tr>
+    <td style="width: 121px;">Temperature:</td>
+    <td style="width: 193px; text-align: right;" id="column-temperature">&nbsp;</td>
+    <td style="width: 28px;">&deg;C</td>
+    </tr>
+    <tr>
+    <td style="width: 121px;">Humidity:</td>
+    <td style="width: 193px; text-align: right;" id="column-humidity">&nbsp;</td>
+    <td style="width: 28px;">%</td>
+    </tr>
+    <tr>
+    <td style="width: 121px;">Pressure:</td>
+    <td style="width: 193px; text-align: right;" id="column-pressure">&nbsp;</td>
+    <td style="width: 28px;">hPa</td>
+    </tr>
+    </tbody>
+    </table>
